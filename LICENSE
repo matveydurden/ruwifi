@@ -1,0 +1,8 @@
+RUWiFi is distributed under the GNU General Public License, version 3 or,
+at your option, any later version, without any warranty.
+
+See COPYING for the full license text.
+
+The bundled sing-box sources retain their original copyright and license
+notices in vendor/sing-box/LICENSE. Third-party dependencies retain their
+respective licenses.

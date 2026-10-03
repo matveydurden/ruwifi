@@ -1,0 +1,46 @@
+diff --git a/dns/transport/fakeip/store.go b/dns/transport/fakeip/store.go
+index b7c51df..a9c10dc 100644
+--- a/dns/transport/fakeip/store.go
++++ b/dns/transport/fakeip/store.go
+@@ -139,16 +139,21 @@ func (s *Store) Create(domain string, isIPv6 bool) (netip.Addr, error) {
+ 		s.inet6Current = nextAddress
+ 		address = nextAddress
+ 	}
+-	err := s.storage.FakeIPStore(address, domain)
+-	if err != nil {
+-		s.logger.Warn("save FakeIP cache: ", err)
+-	}
+-	s.storage.FakeIPSaveMetadataAsync(&adapter.FakeIPMetadata{
++	// Commit the cursor before exposing the mapping. After an abrupt exit, a
++	// reserved-but-unmapped address may be skipped, but an acknowledged address
++	// must never be reassigned to another domain.
++	err := s.storage.FakeIPSaveMetadata(&adapter.FakeIPMetadata{
+ 		Inet4Range:   s.inet4Range,
+ 		Inet6Range:   s.inet6Range,
+ 		Inet4Current: s.inet4Current,
+ 		Inet6Current: s.inet6Current,
+ 	})
++	if err != nil {
++		return netip.Addr{}, E.Cause(err, "save FakeIP cursor")
++	}
++	if err = s.storage.FakeIPStore(address, domain); err != nil {
++		return netip.Addr{}, E.Cause(err, "save FakeIP mapping")
++	}
+ 	return address, nil
+ }
+ 
+diff --git a/experimental/cachefile/fakeip.go b/experimental/cachefile/fakeip.go
+index 814c204..16a6066 100644
+--- a/experimental/cachefile/fakeip.go
++++ b/experimental/cachefile/fakeip.go
+@@ -32,10 +32,6 @@ func (c *CacheFile) FakeIPMetadata() *adapter.FakeIPMetadata {
+ 		if len(metadataBinary) == 0 {
+ 			return os.ErrInvalid
+ 		}
+-		err := bucket.Delete(keyMetadata)
+-		if err != nil {
+-			return err
+-		}
+ 		return metadata.UnmarshalBinary(metadataBinary)
+ 	})
+ 	if err != nil {
