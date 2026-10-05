@@ -53,6 +53,16 @@ struct NetworkInfo {
     }
 }
 
+// Local readiness is separate from reachability of remote websites.
+func checkRoutingHealth(using execute: (String, [String], TimeInterval) throws -> String = {
+    try run($0, $1, timeout: $2)
+}) throws {
+    let answer = try execute("/usr/bin/dig", ["@127.0.0.1", "-p", "15453", "+short", "+time=2", "+tries=1", "health.ruwifi.ru", "A"], 4)
+    guard answer.contains("198.19.") else { throw appError("DNS сервиса не подтверждён") }
+    let route = try execute("/sbin/route", ["-n", "get", "198.19.0.1"], 4)
+    guard route.contains("interface: utun"), !route.contains("REJECT") else { throw appError("Маршрут сервиса не подтверждён") }
+}
+
 final class DNSSettings {
     let user: Identity
     let resolver = OwnedFile(resolverPath, journal: runtimeRoot + "/resolver-journal.json")

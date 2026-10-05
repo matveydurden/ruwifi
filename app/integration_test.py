@@ -1,5 +1,6 @@
-"""Exercise the actual bundled core without installing routes or changing DNS."""
-import json, pathlib, socket, struct, subprocess, tempfile, time, urllib.request, sys
+"""Exercise the actual bundled core without installing routes or using the internet."""
+import json, pathlib, socket, struct, subprocess, tempfile, time, urllib.request, sys, threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 def port():
     with socket.socket() as s:
@@ -11,11 +12,75 @@ def dns(name, qtype, number):
     with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as s:
         s.settimeout(3);s.sendto(packet,('127.0.0.1',number));return s.recv(4096)
 
+class LocalDns:
+    """Tiny loopback DNS fixture; every A query resolves to the local HTTP fixture."""
+    def __init__(self, address, target_ip):
+        self.address = address
+        self.target_ip = socket.inet_aton(target_ip)
+        self.stop = threading.Event()
+        self.ready = threading.Event()
+        self.thread = threading.Thread(target=self._serve, daemon=True)
+
+    def _serve(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.bind(self.address)
+            self.ready.set()
+            sock.settimeout(.2)
+            while not self.stop.is_set():
+                try:
+                    packet, peer = sock.recvfrom(4096)
+                except socket.timeout:
+                    continue
+                if len(packet) < 12:
+                    continue
+                answer = packet[:2] + b'\x81\x80' + packet[4:6] + b'\x00\x01\x00\x00\x00\x00'
+                question_end = 12
+                while question_end < len(packet) and packet[question_end]:
+                    question_end += packet[question_end] + 1
+                question_end += 5
+                question = packet[12:question_end]
+                answer += question + b'\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04' + self.target_ip
+                sock.sendto(answer, peer)
+
+    def __enter__(self):
+        self.thread.start()
+        if not self.ready.wait(timeout=1):
+            raise RuntimeError('local DNS fixture failed to bind')
+        return self
+
+    def __exit__(self, *_):
+        self.stop.set()
+        self.thread.join(timeout=1)
+
+class LocalHttp(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = b'RUWiFi local integration fixture\n'
+        self.send_response(200)
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_):
+        pass
+
 core=str(pathlib.Path(sys.argv[1]).resolve())
 config=json.loads(pathlib.Path('.build/config-test.json').read_text())
 with tempfile.TemporaryDirectory(prefix='ruwifi-core-') as temp:
-    dnsport,apiport,mixedport=port(),port(),port()
+    dnsport,apiport,mixedport,upstream_dnsport,httpport=port(),port(),port(),port(),port()
+    fixture_ip='127.0.0.1'
+    httpserver = ThreadingHTTPServer((fixture_ip, httpport), LocalHttp)
+    httpthread = threading.Thread(target=httpserver.serve_forever, daemon=True)
+    httpthread.start()
+    local_dns = LocalDns(('127.0.0.1', upstream_dnsport), fixture_ip)
+    local_dns.__enter__()
     config['inbounds']=[{'type':'direct','tag':'dns-in','listen':'127.0.0.1','listen_port':dnsport},{'type':'mixed','tag':'test','listen':'127.0.0.1','listen_port':mixedport}]
+    # Keep this test entirely offline. Production still uses the configured Wi-Fi DNS;
+    # this fixture only replaces both upstream resolvers for the child core process.
+    fake_server=next(server for server in config['dns']['servers'] if server.get('type')=='fakeip')
+    config['dns']['servers']=[fake_server,{'type':'udp','tag':'wifi-dns','server':'127.0.0.1','server_port':upstream_dnsport},{'type':'udp','tag':'ordinary-dns','server':'127.0.0.1','server_port':upstream_dnsport}]
+    config['dns']['final']='ordinary-dns'
+    for outbound in config['outbounds']:
+        if outbound.get('tag')=='Wi-Fi': outbound['bind_interface']='lo0'
     config['experimental']['cache_file']['path']=temp+'/cache.db'
     config['experimental']['clash_api']={'external_controller':f'127.0.0.1:{apiport}','secret':'integration-only'}
     pathlib.Path(temp+'/config.json').write_text(json.dumps(config))
@@ -39,8 +104,9 @@ with tempfile.TemporaryDirectory(prefix='ruwifi-core-') as temp:
             for name in ['Wi-Fi','Default','Wi-Fi']:
                 api('/proxies/RU',{'name':name})
                 assert json.loads(api('/proxies/RU'))['now']==name
-            request=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','5','--max-time','15','-I','-sS','-o','/dev/null','-w','%{http_code}','https://ya.ru'],capture_output=True,text=True)
+            request=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','5','--max-time','15','-fsS',f'http://fixture.example.ru:{httpport}/health'],capture_output=True,text=True)
             assert request.returncode==0,(request.stdout,request.stderr)
+            assert request.stdout=='RUWiFi local integration fixture\n',request.stdout
             remembered=dns('persistent.example.ru',1,dnsport)[-4:]
             api('/proxies/RU',{'name':'Default'})
             process.terminate(); process.wait(timeout=3)
@@ -62,20 +128,26 @@ with tempfile.TemporaryDirectory(prefix='ruwifi-core-') as temp:
             assert dns('persistent.example.ru',1,dnsport)[-4:]==remembered,'crash restart lost FakeIP mapping'
             process.terminate();process.wait(timeout=3)
             for outbound in config['outbounds']:
-                if outbound.get('tag')=='Wi-Fi':outbound['bind_interface']='en9999'
+                if outbound.get('tag')=='Wi-Fi':
+                    outbound['bind_interface']='en9999'
+                    # Darwin permits loopback connections even with an invalid
+                    # interface name. An unassigned source address exercises
+                    # a failed bound outbound without leaving this machine.
+                    outbound['inet4_bind_address']='192.0.2.1'
             pathlib.Path(temp+'/config.json').write_text(json.dumps(config))
             process=subprocess.Popen([core,'run','-c',temp+'/config.json'],stdout=log,stderr=log)
             for _ in range(40):
                 try:api('/version');break
                 except OSError:time.sleep(.1)
             api('/proxies/RU',{'name':'Wi-Fi'})
-            failed=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','2','--max-time','4','-I','-sS','https://ya.ru'],capture_output=True,text=True)
-            assert failed.returncode!=0,'missing Wi-Fi unexpectedly fell back to default/VPN'
-            print('PASS: cold startup, abrupt core crash/cache persistence, missing Wi-Fi without fallback')
-            print('PASS: real core DNS for nested .ru names, HTTPS hint suppression, live selector switches and HTTPS via Wi-Fi')
+            failed=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','2','--max-time','4','-fsS',f'http://fixture.example.ru:{httpport}/health'],capture_output=True,text=True)
+            assert failed.returncode!=0,'unavailable outbound unexpectedly fell back to default/VPN'
+            print('PASS: cold startup, abrupt core crash/cache persistence, unavailable outbound without fallback')
+            print('PASS: real core DNS for nested .ru names, HTTPS hint suppression, live selector switches and local HTTP with interface binding')
         except Exception:
             log.flush();log.seek(0);print(log.read()[-5000:]);raise
         finally:
             process.terminate()
             try:process.wait(timeout=3)
             except subprocess.TimeoutExpired:process.kill();process.wait()
+            httpserver.shutdown(); httpserver.server_close(); local_dns.__exit__()

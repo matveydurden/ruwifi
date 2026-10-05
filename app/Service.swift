@@ -150,19 +150,14 @@ import Darwin
                 try engine.select(enabled)
                 if enabled { try settings.enable() }
                 if enabled && network.wifiActive && Date().timeIntervalSince(lastProbe) > 30 {
-                    let answer = try run("/usr/bin/dig", ["@127.0.0.1", "-p", "15453", "+short", "+time=2", "+tries=1", "health.ruwifi.ru", "A"], timeout: 4)
-                    guard answer.contains("198.19.") else { throw appError("DNS сервиса не подтверждён") }
-                    let route = try run("/sbin/route", ["-n", "get", "198.19.0.1"])
-                    guard route.contains("interface: utun"), !route.contains("REJECT") else { throw appError("Маршрут сервиса не подтверждён") }
-                    let result = try run("/usr/bin/curl", ["--noproxy", "*", "--connect-timeout", "3", "--max-time", "5", "-I", "-sS", "-o", "/dev/null", "-w", "%{remote_ip}", "https://ya.ru"], timeout: 6)
-                    guard result.hasPrefix("198.19.") || result.hasPrefix("fd7a:7275:7769:") else { throw appError("Системный DNS ещё не использует сервис") }
+                    try checkRoutingHealth()
                     health = true; lastProbe = Date()
                 }
                 let phase: String, detail: String
                 if !enabled { phase = "off"; detail = "Обычные системные маршруты. VPN управляется отдельно." }
                 else if !network.wifiActive { phase = "waiting"; detail = "Нет Wi-Fi. Адреса .ru ждут подключения."; health = false; lastProbe = .distantPast }
                 else if !network.vpnConnected { phase = "waiting"; detail = ".ru идут через Wi-Fi. VPN-туннель не обнаружен." }
-                else if health { phase = "active"; detail = "Все .ru и их поддомены — через Wi-Fi." }
+                else if health { phase = "active"; detail = "Маршрутизация .ru и поддоменов через Wi-Fi настроена." }
                 else { phase = "applying"; detail = "Проверяю подключение…" }
                 try publish(ServiceStatus(generation: generation, enabled: enabled, phase: phase, detail: detail, checked: Date(), wifi: network.wifi, vpnConnected: network.vpnConnected, enginePID: engine.pid), build: build)
                 lastGeneration = generation; lastError = ""

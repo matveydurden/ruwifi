@@ -3,9 +3,9 @@
 set -euo pipefail
 export LC_ALL=C LANG=C
 REPOSITORY='matveydurden/ruwifi'
-VERSION='v1.0.2'
+VERSION='v1.0.3'
 ARCHIVE='ruwifi-macos-arm64.zip'
-SHA256='51d31996a309aab722ce6eb2231172b2b2bb5a2c9286550de7d5a2c387b9cb49'
+SHA256='8f64a59897a2baa26af90b519c95af4bede807030cc3f8471be7342975efe0d7'
 
 fail() { printf 'Ошибка: %s\n' "$*" >&2; exit 1; }
 check_only=false
@@ -48,10 +48,19 @@ if "$check_only"; then
     printf 'Проверено: %s, SHA256 и подпись. Установка и изменение сети не выполнялись.\n' "$VERSION"
     exit 0
 fi
-[ -r /dev/tty ] && [ -w /dev/tty ] || fail 'Запустите команду в обычном Terminal: нужен ввод пароля администратора.'
 "$bundle/Contents/MacOS/RUWiFi" --prepare-install
-printf '%s\n' 'Введите пароль администратора Mac, если sudo его запросит (символы не отображаются).'
-/usr/bin/sudo "$bundle/Contents/Helpers/RUWiFiHelper" --install "$user_id" </dev/tty || fail 'Служба не установлена. Подробности ошибки приведены выше.'
+printf '%s\n' 'Откроется системное окно macOS для подтверждения установки службы.'
+if ! /usr/bin/osascript - "$bundle/Contents/Helpers/RUWiFiHelper" "$user_id" <<'APPLESCRIPT'
+on run argv
+    set helperPath to item 1 of argv
+    set userId to item 2 of argv
+    set commandLine to quoted form of helperPath & " --install " & quoted form of userId
+    do shell script commandLine with administrator privileges
+end run
+APPLESCRIPT
+then
+    fail 'Установка службы отменена или не выполнена. Повторите команду и подтвердите запрос macOS.'
+fi
 "$bundle/Contents/MacOS/RUWiFi" --finish-install
 /usr/bin/open '/Applications/RU напрямую.app'
 printf '%s\n' 'Установлено. Автозапуск настроен; прежнее состояние Вкл/Выкл сохранено.' 'После первой установки один раз полностью перезапустите Chrome.'
