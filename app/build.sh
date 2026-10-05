@@ -7,12 +7,14 @@ cd "$(dirname "$0")"
 .build/storage-tests
 ./compile.sh Core.swift Storage.swift System.swift InstallTests.swift -o .build/install-tests
 .build/install-tests
+./compile.sh Core.swift Storage.swift InterfaceRuntime.swift InterfaceRuntimeTests.swift -o .build/interface-tests
+.build/interface-tests
 ./build-engine.sh
 engine="$PWD/.build/sing-box"
 "$engine" check -c .build/config-test.json
 python3 integration_test.py "$engine"
 ./compile.sh Core.swift Storage.swift System.swift Service.swift -o .build/RUWiFiHelper
-./compile.sh Core.swift Storage.swift System.swift App.swift -o .build/RUWiFi
+./compile.sh Core.swift Storage.swift System.swift InterfaceRuntime.swift App.swift -o .build/RUWiFi
 app='../dist/RU напрямую.app'
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers" "$app/Contents/Resources"
 cp Info.plist "$app/Contents/Info.plist"

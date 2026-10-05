@@ -7,6 +7,25 @@ struct Preferences: Codable, Equatable {
     init(enabled: Bool) { self.enabled = enabled; generation = UUID().uuidString }
 }
 
+// This is an indicator, not a claim about the VPN provider or final egress.
+// scutil covers registered VPN services; the route fallback covers Network
+// Extension clients such as WireGuard.
+func vpnIsDetected(scutilList: String, publicRoute: String) -> Bool {
+    // Match scutil's protocol tags, never a user-controlled service name.
+    let serviceMarkers = ["[vpn:", "[ipsec:", "[ppp:l2tp]", "[ppp:pptp]"]
+    let registered = scutilList.split(whereSeparator: \.isNewline).contains { rawLine in
+        let line = rawLine.lowercased()
+        guard line.contains("(connected)") else { return false }
+        return serviceMarkers.contains { line.contains($0) }
+    }
+    if registered { return true }
+    let route = publicRoute.lowercased()
+    if route.contains("198.18.") || route.contains("198.19.") || route.contains("fd7a:7275:") {
+        return false
+    }
+    return route.range(of: #"interface:\s*(utun|tun|tap|ipsec)[0-9]+\b"#, options: .regularExpression) != nil
+}
+
 enum RoutingConfiguration {
     static func isRU(_ name: String) -> Bool {
         var host = name.lowercased()

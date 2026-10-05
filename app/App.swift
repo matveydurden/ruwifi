@@ -29,8 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         submenu.addItem(withTitle: "Закрыть интерфейс", action: #selector(quitUI), keyEquivalent: "q").target = self
         item.submenu = submenu; appMenu.addItem(item); NSApp.mainMenu = appMenu
         makeWindow(); makeTray(); refresh()
+        DistributedNotificationCenter.default().addObserver(self, selector: #selector(reopenInterface(_:)), name: showInterfaceNotification, object: user.home + "/Library/Application Support/RUWiFi/interface.lock")
         if !CommandLine.arguments.contains("--background") { show() }
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.refresh() }
+        timer = makeInterfaceRefreshTimer { [weak self] in self?.refresh() }
     }
     func makeWindow() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 470, height: 410), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
@@ -61,6 +62,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tray.menu = menu
     }
     @objc func show() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc func reopenInterface(_ notification: Notification) {
+        let reply = notification.userInfo?["reply"] as? String
+        let display = {
+            self.show()
+            if let reply {
+                DistributedNotificationCenter.default().postNotificationName(interfaceShownNotification, object: reply, userInfo: nil, deliverImmediately: true)
+            }
+        }
+        if Thread.isMainThread { display() } else { DispatchQueue.main.async(execute: display) }
+    }
     @objc func quitUI() { NSApp.terminate(nil) }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { show(); return true }
@@ -99,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         default: stateLabel.stringValue = "Применяю настройки…"; stateLabel.textColor = .secondaryLabelColor
         }
         detailLabel.stringValue = installError ?? status.detail
-        networkLabel.stringValue = "Wi-Fi: \(status.wifi ?? "—")   ·   VPN: \(status.vpnConnected ? "подключён" : "не подключён")"
+        networkLabel.stringValue = "Wi-Fi: \(status.wifi ?? "—")   ·   VPN: \(status.vpnConnected ? "обнаружен" : "не обнаружен")"
         tray.button?.title = status.phase == "active" ? ".ru ✓" : ".ru"
     }
     @objc func toggle() {
@@ -174,8 +185,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             } catch { fputs(error.localizedDescription + "\n", stderr); exit(1) }
         }
         let app = NSApplication.shared
+        let owner: InterfaceInstanceLock?
+        do {
+            let user = try identity(getuid())
+            let directory = user.home + "/Library/Application Support/RUWiFi"
+            try ensureDirectory(directory, mode: 0o700)
+            owner = try acquireInterface(path: directory + "/interface.lock", background: arguments.contains("--background"))
+        } catch {
+            fputs(error.localizedDescription + "\n", stderr)
+            if !arguments.contains("--background") { NSAlert(error: error).runModal() }
+            exit(1)
+        }
+        guard let instance = owner else { return }
         let delegate = AppDelegate()
         app.delegate = delegate; app.setActivationPolicy(.regular)
-        app.run()
+        withExtendedLifetime(instance) { app.run() }
     }
 }

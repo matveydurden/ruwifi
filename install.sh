@@ -1,11 +1,11 @@
 #!/bin/bash
-# Download the private, pinned release; never install as root from a pipe.
+# Download the public, pinned release; never install as root from a pipe.
 set -euo pipefail
 export LC_ALL=C LANG=C
 REPOSITORY='matveydurden/ruwifi'
-VERSION='v1.0.1'
+VERSION='v1.0.2'
 ARCHIVE='ruwifi-macos-arm64.zip'
-SHA256='658acd3bfd3b832f2a65989e543003c33cb77400e441edec5b0a20c7105f8313'
+SHA256='51d31996a309aab722ce6eb2231172b2b2bb5a2c9286550de7d5a2c387b9cb49'
 
 fail() { printf 'Ошибка: %s\n' "$*" >&2; exit 1; }
 check_only=false
@@ -22,8 +22,7 @@ os_version="$(/usr/bin/sw_vers -productVersion)"
 [ "${os_version%%.*}" -ge 15 ] || fail 'Нужна macOS 15 или новее.'
 user_id="$(/usr/bin/id -u)"
 [ "$user_id" -ge 501 ] || fail 'Запустите установщик обычным пользователем, без sudo.'
-command -v gh >/dev/null 2>&1 || fail 'Установите GitHub CLI: brew install gh; затем gh auth login.'
-gh auth status --hostname github.com >/dev/null 2>&1 || fail 'Войдите в GitHub: gh auth login --hostname github.com'
+command -v curl >/dev/null 2>&1 || fail 'Не найден curl, входящий в состав macOS.'
 
 # The root helper must read from outside privacy-protected Documents/Downloads.
 cache="$HOME/Library/Caches"
@@ -32,8 +31,9 @@ staging="$(/usr/bin/mktemp -d "$cache/RUWiFi-install.XXXXXX")"
 trap '/bin/rm -rf "$staging"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-printf 'Скачиваю RUWiFi %s из приватного репозитория…\n' "$VERSION"
-gh release download "$VERSION" --repo "$REPOSITORY" --pattern "$ARCHIVE" --output "$staging/$ARCHIVE" || fail 'Не удалось скачать релиз. Проверьте сеть и доступ к приватному репозиторию.'
+printf 'Скачиваю RUWiFi %s…\n' "$VERSION"
+curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
+    "https://github.com/$REPOSITORY/releases/download/$VERSION/$ARCHIVE" --output "$staging/$ARCHIVE" || fail 'Не удалось скачать релиз. Проверьте подключение к GitHub и повторите команду.'
 actual="$(/usr/bin/shasum -a 256 "$staging/$ARCHIVE")"
 [ "${actual%% *}" = "$SHA256" ] || fail 'Контрольная сумма архива не совпала. Установка остановлена.'
 /usr/bin/ditto -x -k "$staging/$ARCHIVE" "$staging/unpacked"

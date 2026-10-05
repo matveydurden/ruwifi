@@ -13,6 +13,17 @@ import Foundation
         for name in ["ru.com", "site.ru.com", "notru", ".ru", "a..ru", "https://site.ru", "a/ru", "foo.com"] {
             check(!RoutingConfiguration.isRU(name), "RU-ROUTE: falsely classified \(name)")
         }
+        // VPN-DETECTION: provider-independent service and route indicators.
+        let hidemyName = "(Connected) VPN (hidemyname.vpn) \"hidemyname.vpn (OpenVPN)\" [VPN:hidemyname.vpn]"
+        check(vpnIsDetected(scutilList: hidemyName, publicRoute: "interface: en0"), "VPN-DETECTION: OpenVPN service not recognized")
+        check(vpnIsDetected(scutilList: "(Connected) Work tunnel [VPN:WireGuard]", publicRoute: "interface: en0"), "VPN-DETECTION: generic VPN service not recognized")
+        check(vpnIsDetected(scutilList: "(Connected) Office VPN [IPSec:ikev2]", publicRoute: "interface: en0"), "VPN-DETECTION: IPSec service not recognized")
+        check(vpnIsDetected(scutilList: "(Connected) PPP --> L2TP [PPP:L2TP]", publicRoute: "interface: ppp0"), "VPN-DETECTION: L2TP service not recognized")
+        check(vpnIsDetected(scutilList: "", publicRoute: "destination: default\ninterface: utun5"), "VPN-DETECTION: tunnel route not recognized")
+        check(!vpnIsDetected(scutilList: "(Disconnected) Work tunnel [VPN:WireGuard]", publicRoute: "interface: en0"), "VPN-DETECTION: disconnected service accepted")
+        check(!vpnIsDetected(scutilList: "(Connected) PPP modem [PPP:Modem]", publicRoute: "interface: ppp0"), "VPN-DETECTION: PPP modem accepted as VPN")
+        check(!vpnIsDetected(scutilList: "(Connected) WireGuard [PPP:Modem]", publicRoute: "interface: ppp0"), "VPN-DETECTION: modem with VPN-like name accepted")
+        check(!vpnIsDetected(scutilList: "", publicRoute: "destination: 198.19.0.1\ninterface: utun0"), "VPN-DETECTION: RUWiFi FakeIP route accepted as external VPN")
         // RU-OWNERSHIP: off must preserve an administrator's external changes.
         check(restorationDecision(current: Data("foreign".utf8), installed: Data("ours".utf8)) == .preserveExternalChange, "RU-OWNERSHIP: overwrites externally changed file")
         check(restorationDecision(current: nil, installed: Data("ours".utf8)) == .preserveExternalChange, "RU-OWNERSHIP: recreates externally removed file")

@@ -159,9 +159,9 @@ import Darwin
                     health = true; lastProbe = Date()
                 }
                 let phase: String, detail: String
-                if !enabled { phase = "off"; detail = "Обычная работа сети. hidemy.name управляет VPN." }
+                if !enabled { phase = "off"; detail = "Обычные системные маршруты. VPN управляется отдельно." }
                 else if !network.wifiActive { phase = "waiting"; detail = "Нет Wi-Fi. Адреса .ru ждут подключения."; health = false; lastProbe = .distantPast }
-                else if !network.vpnConnected { phase = "waiting"; detail = ".ru идут через Wi-Fi. Подключи hidemy.name для остальных адресов." }
+                else if !network.vpnConnected { phase = "waiting"; detail = ".ru идут через Wi-Fi. VPN-туннель не обнаружен." }
                 else if health { phase = "active"; detail = "Все .ru и их поддомены — через Wi-Fi." }
                 else { phase = "applying"; detail = "Проверяю подключение…" }
                 try publish(ServiceStatus(generation: generation, enabled: enabled, phase: phase, detail: detail, checked: Date(), wifi: network.wifi, vpnConnected: network.vpnConnected, enginePID: engine.pid), build: build)

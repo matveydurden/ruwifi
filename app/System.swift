@@ -45,8 +45,11 @@ struct NetworkInfo {
         guard wifi.range(of: "^en[0-9]+$", options: .regularExpression) != nil else { throw appError("Интерфейс Wi-Fi не найден") }
         let description = try run("/sbin/ifconfig", [wifi])
         let vpn = try run("/usr/sbin/scutil", ["--nc", "list"])
+        // A route probe catches Network Extension VPNs that do not register
+        // as a scutil service. It is read-only and ignores our own FakeIP route.
+        let publicRoute = (try? run("/sbin/route", ["-n", "get", "1.1.1.1"], timeout: 2)) ?? ""
         return NetworkInfo(wifi: wifi, wifiActive: description.contains("status: active") && description.contains("inet "),
-            vpnConnected: vpn.components(separatedBy: "\n").contains { $0.contains("(Connected)") && $0.contains("hidemyname.vpn") })
+            vpnConnected: vpnIsDetected(scutilList: vpn, publicRoute: publicRoute))
     }
 }
 
