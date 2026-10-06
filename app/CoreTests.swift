@@ -13,6 +13,13 @@ import Foundation
         for name in ["ru.com", "site.ru.com", "notru", ".ru", "a..ru", "https://site.ru", "a/ru", "foo.com", "not1cfresh.com", "1cfresh.com.evil.com", "1cfresh.com..", "a..1cfresh.com"] {
             check(!RoutingConfiguration.isDirectDomain(name), "RU-ROUTE: falsely classified \(name)")
         }
+        // IDN-ROUTE: browser DNS uses ASCII Punycode for .рус and .рф.
+        for name in ["www.xn--80aa3anexr8c.xn--p1acf", "a.b.xn--80aa3anexr8c.xn--p1acf", "xn--e1afmkfd.xn--p1ai", "a.b.xn--e1afmkfd.xn--p1ai", "WWW.XN--80AA3ANEXR8C.XN--P1ACF.", "XN--E1AFMKFD.XN--P1AI."] {
+            check(RoutingConfiguration.isDirectDomain(name), "IDN-ROUTE: did not classify \(name)")
+        }
+        for name in ["site.xn--p1acf.com", "site.xn--p1ai.com", "sitexn--p1ai", "site.xn--p1acfe", "site.xn--90ais", "xn--e1afmkfd.com", "a..xn--p1acf", ".xn--p1ai"] {
+            check(!RoutingConfiguration.isDirectDomain(name), "IDN-ROUTE: falsely classified \(name)")
+        }
         // VPN-DETECTION: provider-independent service and route indicators.
         let hidemyName = "(Connected) VPN (hidemyname.vpn) \"hidemyname.vpn (OpenVPN)\" [VPN:hidemyname.vpn]"
         check(vpnIsDetected(scutilList: hidemyName, publicRoute: "interface: en0"), "VPN-DETECTION: OpenVPN service not recognized")
@@ -45,9 +52,10 @@ import Foundation
         check(!status.isFresh(for: pref), "RU-STATUS: stale heartbeat accepted")
         let config = try RoutingConfiguration.make(wifi: "en0", cache: "/tmp/ru-cache.db", secret: "test")
         let dnsRules = (config["dns"] as? [String: Any])?["rules"] as? [[String: Any]] ?? []
-        check(dnsRules.count == 2 && dnsRules.allSatisfy { $0["domain_suffix"] as? [String] == ["ru", "1cfresh.com"] }, "FRESH-DNS: A/AAAA and HTTPS/SVCB rules must include only approved suffixes")
+        let expectedSuffixes = ["ru", "1cfresh.com", "xn--p1acf", "xn--p1ai"]
+        check(dnsRules.count == 2 && dnsRules.allSatisfy { $0["domain_suffix"] as? [String] == expectedSuffixes }, "DIRECT-DNS: A/AAAA and HTTPS/SVCB rules must include only approved suffixes")
         let routeRules = (config["route"] as? [String: Any])?["rules"] as? [[String: Any]] ?? []
-        check(routeRules.contains { $0["outbound"] as? String == "RU" && $0["domain_suffix"] as? [String] == ["ru", "1cfresh.com"] }, "FRESH-ROUTE: 1cfresh must use the same on/off selector as .ru")
+        check(routeRules.contains { $0["outbound"] as? String == "RU" && $0["domain_suffix"] as? [String] == expectedSuffixes }, "DIRECT-ROUTE: every approved suffix must use the same on/off selector")
         let inbounds = config["inbounds"] as? [[String: Any]] ?? []
         let tun = inbounds.first { ($0["type"] as? String) == "tun" } ?? [:]
         check(tun["route_address"] as? [String] == ["198.19.0.0/16", "fd7a:7275:7769::/48"], "RU-ISOLATION: must capture only owned FakeIP networks")

@@ -155,9 +155,9 @@ import Darwin
                 }
                 let phase: String, detail: String
                 if !enabled { phase = "off"; detail = "Обычные системные маршруты. VPN управляется отдельно." }
-                else if !network.wifiActive { phase = "waiting"; detail = "Нет Wi-Fi. .ru и 1cfresh.com ждут подключения."; health = false; lastProbe = .distantPast }
-                else if !network.vpnConnected { phase = "waiting"; detail = ".ru и 1cfresh.com идут через Wi-Fi. VPN-туннель не обнаружен." }
-                else if health { phase = "active"; detail = "Для .ru и 1cfresh.com настроен выход через Wi-Fi." }
+                else if !network.wifiActive { phase = "waiting"; detail = "Нет Wi-Fi. .ru, .рус, .рф и 1cfresh.com ждут подключения."; health = false; lastProbe = .distantPast }
+                else if !network.vpnConnected { phase = "waiting"; detail = ".ru, .рус, .рф и 1cfresh.com идут через Wi-Fi. VPN-туннель не обнаружен." }
+                else if health { phase = "active"; detail = "Для .ru, .рус, .рф и 1cfresh.com настроен выход через Wi-Fi." }
                 else { phase = "applying"; detail = "Проверяю подключение…" }
                 try publish(ServiceStatus(generation: generation, enabled: enabled, phase: phase, detail: detail, checked: Date(), wifi: network.wifi, vpnConnected: network.vpnConnected, enginePID: engine.pid), build: build)
                 lastGeneration = generation; lastError = ""
