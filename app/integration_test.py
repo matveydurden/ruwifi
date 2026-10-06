@@ -95,19 +95,29 @@ with tempfile.TemporaryDirectory(prefix='ruwifi-core-') as temp:
                 if process.poll() is not None:raise RuntimeError('core exited')
                 try:api('/version');break
                 except OSError:time.sleep(.1)
-            for name in ['example.ru','a.b.c.example.ru','SITE.RU']:
+            for name in ['example.ru','a.b.c.example.ru','SITE.RU','1cfresh.com','msk1.1cfresh.com','a.b.1cfresh.com','1cfresh.com.ru']:
                 answer=dns(name,1,dnsport)
                 assert struct.unpack('!H',answer[6:8])[0]==1,name
                 assert answer[-4:-2]==bytes([198,19]),(name,answer.hex())
-            answer=dns('a.b.example.ru',65,dnsport)
-            assert answer[3]&15==0 and struct.unpack('!H',answer[6:8])[0]==0,'HTTPS hints must not bypass FakeIP'
+            for name in ['1cfresh.com','a.b.1cfresh.com']:
+                answer=dns(name,28,dnsport)
+                assert struct.unpack('!H',answer[6:8])[0]==1 and answer[-16:-10]==bytes.fromhex('fd7a72757769'), 'AAAA must use the owned FakeIP range'
+            for name in ['example.com','evil1cfresh.com','1cfresh.com.evil']:
+                answer=dns(name,1,dnsport)
+                assert answer[-4:]==socket.inet_aton('127.0.0.1'), 'unrelated name incorrectly captured: '+name
+            for name in ['a.b.example.ru','1cfresh.com','msk1.1cfresh.com']:
+                for qtype in [64,65]:
+                    answer=dns(name,qtype,dnsport)
+                    assert answer[3]&15==0 and struct.unpack('!H',answer[6:8])[0]==0,'HTTPS/SVCB hints must not bypass FakeIP: '+name
             for name in ['Wi-Fi','Default','Wi-Fi']:
                 api('/proxies/RU',{'name':name})
                 assert json.loads(api('/proxies/RU'))['now']==name
-            request=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','5','--max-time','15','-fsS',f'http://fixture.example.ru:{httpport}/health'],capture_output=True,text=True)
+                fresh_request=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','2','--max-time','5','-fsS',f'http://msk1.1cfresh.com:{httpport}/health'],capture_output=True,text=True)
+                assert fresh_request.returncode==0 and fresh_request.stdout=='RUWiFi local integration fixture\n', (name,fresh_request.stderr)
+            request=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','5','--max-time','15','-fsS',f'http://fixture.1cfresh.com:{httpport}/health'],capture_output=True,text=True)
             assert request.returncode==0,(request.stdout,request.stderr)
             assert request.stdout=='RUWiFi local integration fixture\n',request.stdout
-            remembered=dns('persistent.example.ru',1,dnsport)[-4:]
+            remembered=dns('persistent.1cfresh.com',1,dnsport)[-4:]
             api('/proxies/RU',{'name':'Default'})
             process.terminate(); process.wait(timeout=3)
             config['experimental']['cache_file']['cache_id']='fresh-start'
@@ -117,7 +127,7 @@ with tempfile.TemporaryDirectory(prefix='ruwifi-core-') as temp:
                 try:api('/version');break
                 except OSError:time.sleep(.1)
             assert json.loads(api('/proxies/RU'))['now']=='Wi-Fi','cold start must ignore stale selector cache'
-            assert dns('persistent.example.ru',1,dnsport)[-4:]==remembered,'cold start lost cached FakeIP mapping'
+            assert dns('persistent.1cfresh.com',1,dnsport)[-4:]==remembered,'cold start lost cached FakeIP mapping'
             api('/proxies/RU',{'name':'Default'})
             process.kill(); process.wait(timeout=3)
             process=subprocess.Popen([core,'run','-c',temp+'/config.json'],stdout=log,stderr=log)
@@ -125,7 +135,7 @@ with tempfile.TemporaryDirectory(prefix='ruwifi-core-') as temp:
                 try:api('/version');break
                 except OSError:time.sleep(.1)
             assert json.loads(api('/proxies/RU'))['now']=='Default','crash restart lost applied Off state'
-            assert dns('persistent.example.ru',1,dnsport)[-4:]==remembered,'crash restart lost FakeIP mapping'
+            assert dns('persistent.1cfresh.com',1,dnsport)[-4:]==remembered,'crash restart lost FakeIP mapping'
             process.terminate();process.wait(timeout=3)
             for outbound in config['outbounds']:
                 if outbound.get('tag')=='Wi-Fi':
@@ -140,10 +150,10 @@ with tempfile.TemporaryDirectory(prefix='ruwifi-core-') as temp:
                 try:api('/version');break
                 except OSError:time.sleep(.1)
             api('/proxies/RU',{'name':'Wi-Fi'})
-            failed=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','2','--max-time','4','-fsS',f'http://fixture.example.ru:{httpport}/health'],capture_output=True,text=True)
+            failed=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','2','--max-time','4','-fsS',f'http://fixture.1cfresh.com:{httpport}/health'],capture_output=True,text=True)
             assert failed.returncode!=0,'unavailable outbound unexpectedly fell back to default/VPN'
             print('PASS: cold startup, abrupt core crash/cache persistence, unavailable outbound without fallback')
-            print('PASS: real core DNS for nested .ru names, HTTPS hint suppression, live selector switches and local HTTP with interface binding')
+            print('PASS: real core DNS for .ru and 1cfresh.com boundaries, HTTPS hint suppression, live selector switches and local HTTP with interface binding')
         except Exception:
             log.flush();log.seek(0);print(log.read()[-5000:]);raise
         finally:

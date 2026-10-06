@@ -7,11 +7,11 @@ import Foundation
             if !condition() { failures.append(description) }
         }
         // RU-ROUTE: arbitrary depth, case, absolute names; reject lookalike suffixes.
-        for name in ["site.ru", "a.b.c.site.ru", "SITE.RU", "site.ru.", "xn--e1afmkfd.ru"] {
-            check(RoutingConfiguration.isRU(name), "RU-ROUTE: did not classify \(name)")
+        for name in ["site.ru", "a.b.c.site.ru", "SITE.RU", "site.ru.", "xn--e1afmkfd.ru", "1cfresh.com", "msk1.1cfresh.com", "a.b.1cfresh.com", "MSK1.1CFRESH.COM.", "1cfresh.com.ru"] {
+            check(RoutingConfiguration.isDirectDomain(name), "RU-ROUTE: did not classify \(name)")
         }
-        for name in ["ru.com", "site.ru.com", "notru", ".ru", "a..ru", "https://site.ru", "a/ru", "foo.com"] {
-            check(!RoutingConfiguration.isRU(name), "RU-ROUTE: falsely classified \(name)")
+        for name in ["ru.com", "site.ru.com", "notru", ".ru", "a..ru", "https://site.ru", "a/ru", "foo.com", "not1cfresh.com", "1cfresh.com.evil.com", "1cfresh.com..", "a..1cfresh.com"] {
+            check(!RoutingConfiguration.isDirectDomain(name), "RU-ROUTE: falsely classified \(name)")
         }
         // VPN-DETECTION: provider-independent service and route indicators.
         let hidemyName = "(Connected) VPN (hidemyname.vpn) \"hidemyname.vpn (OpenVPN)\" [VPN:hidemyname.vpn]"
@@ -44,6 +44,10 @@ import Foundation
         status.generation = pref.generation; status.checked = Date().addingTimeInterval(-60)
         check(!status.isFresh(for: pref), "RU-STATUS: stale heartbeat accepted")
         let config = try RoutingConfiguration.make(wifi: "en0", cache: "/tmp/ru-cache.db", secret: "test")
+        let dnsRules = (config["dns"] as? [String: Any])?["rules"] as? [[String: Any]] ?? []
+        check(dnsRules.count == 2 && dnsRules.allSatisfy { $0["domain_suffix"] as? [String] == ["ru", "1cfresh.com"] }, "FRESH-DNS: A/AAAA and HTTPS/SVCB rules must include only approved suffixes")
+        let routeRules = (config["route"] as? [String: Any])?["rules"] as? [[String: Any]] ?? []
+        check(routeRules.contains { $0["outbound"] as? String == "RU" && $0["domain_suffix"] as? [String] == ["ru", "1cfresh.com"] }, "FRESH-ROUTE: 1cfresh must use the same on/off selector as .ru")
         let inbounds = config["inbounds"] as? [[String: Any]] ?? []
         let tun = inbounds.first { ($0["type"] as? String) == "tun" } ?? [:]
         check(tun["route_address"] as? [String] == ["198.19.0.0/16", "fd7a:7275:7769::/48"], "RU-ISOLATION: must capture only owned FakeIP networks")

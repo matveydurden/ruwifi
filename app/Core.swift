@@ -27,10 +27,11 @@ func vpnIsDetected(scutilList: String, publicRoute: String) -> Bool {
 }
 
 enum RoutingConfiguration {
-    static func isRU(_ name: String) -> Bool {
+    static let directDomainSuffixes = ["ru", "1cfresh.com"]
+    static func isDirectDomain(_ name: String) -> Bool {
         var host = name.lowercased()
         if host.hasSuffix(".") { host.removeLast() }
-        guard host.utf8.count <= 253, host.hasSuffix(".ru") else { return false }
+        guard host.utf8.count <= 253, directDomainSuffixes.contains(where: { host.hasSuffix("." + $0) || ($0.contains(".") && host == $0) }) else { return false }
         return host.split(separator: ".", omittingEmptySubsequences: false).allSatisfy { label in
             !label.isEmpty && label.utf8.count <= 63 && label.first != "-" && label.last != "-" &&
             label.utf8.allSatisfy { (97...122).contains($0) || (48...57).contains($0) || $0 == 45 }
@@ -52,8 +53,8 @@ enum RoutingConfiguration {
                 ["type": "fakeip", "tag": "fake", "inet4_range": "198.19.0.0/16", "inet6_range": "fd7a:7275:7769::/48"],
                 resolver("wifi-dns", interface: wifi), resolver("ordinary-dns", interface: nil)],
                 "rules": [
-                    ["domain_suffix": ["ru"], "query_type": ["A", "AAAA"], "action": "route", "server": "fake", "rewrite_ttl": 5],
-                    ["domain_suffix": ["ru"], "query_type": ["HTTPS", "SVCB"], "action": "predefined", "rcode": "NOERROR"]
+                    ["domain_suffix": directDomainSuffixes, "query_type": ["A", "AAAA"], "action": "route", "server": "fake", "rewrite_ttl": 5],
+                    ["domain_suffix": directDomainSuffixes, "query_type": ["HTTPS", "SVCB"], "action": "predefined", "rcode": "NOERROR"]
                 ], "final": "ordinary-dns"],
             "inbounds": [
                 ["type": "direct", "tag": "dns-in", "listen": "127.0.0.1", "listen_port": 15453],
@@ -69,7 +70,7 @@ enum RoutingConfiguration {
             ],
             "route": ["rules": [
                 ["inbound": ["dns-in"], "action": "hijack-dns"],
-                ["domain_suffix": ["ru"], "action": "route", "outbound": "RU"],
+                ["domain_suffix": directDomainSuffixes, "action": "route", "outbound": "RU"],
                 ["action": "reject"]
             ]],
             "experimental": [

@@ -7,6 +7,8 @@ cd "$(dirname "$0")"
 .build/storage-tests
 ./compile.sh Core.swift Storage.swift System.swift InstallTests.swift -o .build/install-tests
 .build/install-tests
+./compile.sh Core.swift Storage.swift System.swift DomainResolverTests.swift -o .build/domain-resolver-tests
+.build/domain-resolver-tests
 ./compile.sh Core.swift Storage.swift System.swift RoutingHealthTests.swift -o .build/health-tests
 .build/health-tests
 ./compile.sh Core.swift Storage.swift InterfaceRuntime.swift InterfaceRuntimeTests.swift -o .build/interface-tests

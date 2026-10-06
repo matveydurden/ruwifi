@@ -10,7 +10,6 @@ let engineLabel = "local.matvey.RUWiFi.Engine"
 let enginePlist = runtimeRoot + "/engine.plist"
 let daemonPlist = "/Library/LaunchDaemons/" + serviceLabel + ".plist"
 let installedApp = "/Applications/RU напрямую.app"
-let resolverPath = "/private/etc/resolver/ru"
 let resolverData = Data("# Managed by RUWiFi\nnameserver 127.0.0.1\nport 15453\ntimeout 2\nsearch_order 1\n".utf8)
 
 struct Identity: Codable { var uid: UInt32; var name: String; var home: String }
@@ -63,9 +62,32 @@ func checkRoutingHealth(using execute: (String, [String], TimeInterval) throws -
     guard route.contains("interface: utun"), !route.contains("REJECT") else { throw appError("Маршрут сервиса не подтверждён") }
 }
 
+// Keep the original .ru journal name so upgrades restore the pre-install DNS.
+struct DomainResolvers {
+    let files: [OwnedFile]
+    init(directory: String = "/private/etc/resolver", journals: String = runtimeRoot) {
+        files = RoutingConfiguration.directDomainSuffixes.map { suffix in
+            let journal = suffix == "ru" ? "resolver-journal.json" : "resolver-" + suffix + "-journal.json"
+            return OwnedFile(directory + "/" + suffix, journal: journals + "/" + journal)
+        }
+    }
+    var snapshotPaths: [String] { files.flatMap { [$0.path, $0.journal] } }
+    var hasJournals: Bool { files.contains { FileManager.default.fileExists(atPath: $0.journal) } }
+    func needsApply() throws -> Bool {
+        for file in files { if try optionalFile(file.path) != resolverData { return true } }
+        return false
+    }
+    func apply() throws { for file in files { try file.apply(resolverData) } }
+    func restore() throws {
+        var problems: [String] = []
+        for file in files { do { try file.restore() } catch { problems.append(error.localizedDescription) } }
+        if !problems.isEmpty { throw appError(problems.joined(separator: "\n")) }
+    }
+}
+
 final class DNSSettings {
     let user: Identity
-    let resolver = OwnedFile(resolverPath, journal: runtimeRoot + "/resolver-journal.json")
+    let resolvers = DomainResolvers()
     var chromePath: String { "/Library/Managed Preferences/" + user.name + "/com.google.Chrome.plist" }
     var chrome: OwnedFile { OwnedFile(chromePath, journal: runtimeRoot + "/chrome-journal.json") }
     init(_ user: Identity) { self.user = user }
@@ -85,15 +107,15 @@ final class DNSSettings {
         plist["DnsOverHttpsMode"] = "off"
         plist["BuiltInDnsClientEnabled"] = false
         let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
-        let changed = try optionalFile(chromePath) != data || optionalFile(resolverPath) != resolverData
+        let changed = try optionalFile(chromePath) != data || resolvers.needsApply()
         try chrome.apply(data)
-        try resolver.apply(resolverData)
+        try resolvers.apply()
         if changed { refresh() }
     }
     func disable() throws {
-        let changed = FileManager.default.fileExists(atPath: runtimeRoot + "/resolver-journal.json") || FileManager.default.fileExists(atPath: runtimeRoot + "/chrome-journal.json")
+        let changed = resolvers.hasJournals || FileManager.default.fileExists(atPath: runtimeRoot + "/chrome-journal.json")
         var problems: [String] = []
-        do { try resolver.restore() } catch { problems.append(error.localizedDescription) }
+        do { try resolvers.restore() } catch { problems.append(error.localizedDescription) }
         do { try chrome.restore() } catch { problems.append(error.localizedDescription) }
         if changed { refresh() }
         if !problems.isEmpty { throw appError(problems.joined(separator: "\n")) }
