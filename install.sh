@@ -3,9 +3,9 @@
 set -euo pipefail
 export LC_ALL=C LANG=C
 REPOSITORY='matveydurden/ruwifi'
-VERSION='v1.0.5'
+VERSION='v1.0.6'
 ARCHIVE='ruwifi-macos-arm64.zip'
-SHA256='e4c6515a6922fc4d262e936d03afc0bf8426c13ede8ac3a7878fc265d108c49c'
+SHA256='257c3ee8e6f0cbd45d6caa448df51820deea8979d1835d06ed62ab76fbd7aecb'
 
 fail() { printf 'Ошибка: %s\n' "$*" >&2; exit 1; }
 check_only=false

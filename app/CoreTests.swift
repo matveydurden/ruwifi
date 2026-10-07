@@ -20,6 +20,12 @@ import Foundation
         for name in ["site.xn--p1acf.com", "site.xn--p1ai.com", "sitexn--p1ai", "site.xn--p1acfe", "site.xn--90ais", "xn--e1afmkfd.com", "a..xn--p1acf", ".xn--p1ai"] {
             check(!RoutingConfiguration.isDirectDomain(name), "IDN-ROUTE: falsely classified \(name)")
         }
+        for name in ["beget.com", "cp.beget.com", "a.b.beget.com", "CP.BEGET.COM.", "beget.com.ru"] {
+            check(RoutingConfiguration.isDirectDomain(name), "BEGET-ROUTE: did not classify \(name)")
+        }
+        for name in ["notbeget.com", "beget.com.evil", "cp.beget.com.evil", "a..beget.com"] {
+            check(!RoutingConfiguration.isDirectDomain(name), "BEGET-ROUTE: falsely classified \(name)")
+        }
         // VPN-DETECTION: provider-independent service and route indicators.
         let hidemyName = "(Connected) VPN (hidemyname.vpn) \"hidemyname.vpn (OpenVPN)\" [VPN:hidemyname.vpn]"
         check(vpnIsDetected(scutilList: hidemyName, publicRoute: "interface: en0"), "VPN-DETECTION: OpenVPN service not recognized")
@@ -52,7 +58,7 @@ import Foundation
         check(!status.isFresh(for: pref), "RU-STATUS: stale heartbeat accepted")
         let config = try RoutingConfiguration.make(wifi: "en0", cache: "/tmp/ru-cache.db", secret: "test")
         let dnsRules = (config["dns"] as? [String: Any])?["rules"] as? [[String: Any]] ?? []
-        let expectedSuffixes = ["ru", "1cfresh.com", "xn--p1acf", "xn--p1ai"]
+        let expectedSuffixes = ["ru", "1cfresh.com", "xn--p1acf", "xn--p1ai", "beget.com"]
         check(dnsRules.count == 2 && dnsRules.allSatisfy { $0["domain_suffix"] as? [String] == expectedSuffixes }, "DIRECT-DNS: A/AAAA and HTTPS/SVCB rules must include only approved suffixes")
         let routeRules = (config["route"] as? [String: Any])?["rules"] as? [[String: Any]] ?? []
         check(routeRules.contains { $0["outbound"] as? String == "RU" && $0["domain_suffix"] as? [String] == expectedSuffixes }, "DIRECT-ROUTE: every approved suffix must use the same on/off selector")
