@@ -96,25 +96,26 @@ with tempfile.TemporaryDirectory(prefix='ruwifi-core-') as temp:
                 try:api('/version');break
                 except OSError:time.sleep(.1)
             idn_names=['www.xn--80aa3anexr8c.xn--p1acf','a.b.xn--80aa3anexr8c.xn--p1acf','xn--e1afmkfd.xn--p1ai','a.b.xn--e1afmkfd.xn--p1ai','WWW.XN--80AA3ANEXR8C.XN--P1ACF','XN--E1AFMKFD.XN--P1AI']
+            pachca_names=['pachca.com','app.pachca.com','a.b.pachca.com','APP.PACHCA.COM','pachca.com.ru']
             beget_names=['beget.com','cp.beget.com','a.b.beget.com','CP.BEGET.COM','beget.com.ru']
-            for name in ['example.ru','a.b.c.example.ru','SITE.RU','1cfresh.com','msk1.1cfresh.com','a.b.1cfresh.com','1cfresh.com.ru']+idn_names+beget_names:
+            for name in ['example.ru','a.b.c.example.ru','SITE.RU','1cfresh.com','msk1.1cfresh.com','a.b.1cfresh.com','1cfresh.com.ru']+idn_names+beget_names+pachca_names:
                 answer=dns(name,1,dnsport)
                 assert struct.unpack('!H',answer[6:8])[0]==1,name
                 assert answer[-4:-2]==bytes([198,19]),(name,answer.hex())
-            for name in ['1cfresh.com','a.b.1cfresh.com']+idn_names+beget_names:
+            for name in ['1cfresh.com','a.b.1cfresh.com']+idn_names+beget_names+pachca_names:
                 answer=dns(name,28,dnsport)
                 assert struct.unpack('!H',answer[6:8])[0]==1 and answer[-16:-10]==bytes.fromhex('fd7a72757769'), 'AAAA must use the owned FakeIP range'
-            for name in ['example.com','evil1cfresh.com','1cfresh.com.evil','site.xn--p1acf.com','site.xn--p1ai.com','sitexn--p1ai','site.xn--p1acfe','site.xn--90ais','xn--e1afmkfd.com','notbeget.com','beget.com.evil','cp.beget.com.evil']:
+            for name in ['example.com','evil1cfresh.com','1cfresh.com.evil','site.xn--p1acf.com','site.xn--p1ai.com','sitexn--p1ai','site.xn--p1acfe','site.xn--90ais','xn--e1afmkfd.com','notbeget.com','beget.com.evil','cp.beget.com.evil','notpachca.com','pachca.com.evil','app.pachca.com.evil']:
                 answer=dns(name,1,dnsport)
                 assert answer[-4:]==socket.inet_aton('127.0.0.1'), 'unrelated name incorrectly captured: '+name
-            for name in ['a.b.example.ru','1cfresh.com','msk1.1cfresh.com']+idn_names+beget_names:
+            for name in ['a.b.example.ru','1cfresh.com','msk1.1cfresh.com']+idn_names+beget_names+pachca_names:
                 for qtype in [64,65]:
                     answer=dns(name,qtype,dnsport)
                     assert answer[3]&15==0 and struct.unpack('!H',answer[6:8])[0]==0,'HTTPS/SVCB hints must not bypass FakeIP: '+name
             for name in ['Wi-Fi','Default','Wi-Fi']:
                 api('/proxies/RU',{'name':name})
                 assert json.loads(api('/proxies/RU'))['now']==name
-                for host in ['cp.beget.com','msk1.1cfresh.com','www.xn--80aa3anexr8c.xn--p1acf','a.b.xn--e1afmkfd.xn--p1ai']:
+                for host in ['app.pachca.com','cp.beget.com','msk1.1cfresh.com','www.xn--80aa3anexr8c.xn--p1acf','a.b.xn--e1afmkfd.xn--p1ai']:
                     request=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','2','--max-time','5','-fsS',f'http://{host}:{httpport}/health'],capture_output=True,text=True)
                     assert request.returncode==0 and request.stdout=='RUWiFi local integration fixture\n', (name,host,request.stderr)
             request=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','5','--max-time','15','-fsS',f'http://fixture.1cfresh.com:{httpport}/health'],capture_output=True,text=True)
@@ -156,7 +157,7 @@ with tempfile.TemporaryDirectory(prefix='ruwifi-core-') as temp:
             failed=subprocess.run(['curl','--proxy',f'socks5h://127.0.0.1:{mixedport}','--noproxy','','--connect-timeout','2','--max-time','4','-fsS',f'http://fixture.1cfresh.com:{httpport}/health'],capture_output=True,text=True)
             assert failed.returncode!=0,'unavailable outbound unexpectedly fell back to default/VPN'
             print('PASS: cold startup, abrupt core crash/cache persistence, unavailable outbound without fallback')
-            print('PASS: real core DNS for .ru, .рус, .рф, 1cfresh.com and beget.com boundaries, HTTPS hint suppression, live selector switches and local HTTP with interface binding')
+            print('PASS: real core DNS for .ru, .рус, .рф, 1cfresh.com, beget.com and pachca.com boundaries, HTTPS hint suppression, live selector switches and local HTTP with interface binding')
         except Exception:
             log.flush();log.seek(0);print(log.read()[-5000:]);raise
         finally:

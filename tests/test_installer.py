@@ -27,7 +27,7 @@ class InstallerTests(unittest.TestCase):
 
     def test_corrupt_archive(self):
         result = self.run_installer('''
-[[ "$*" = *"https://github.com/matveydurden/ruwifi/releases/download/v1.0.6/ruwifi-macos-arm64.zip"* ]] || exit 43
+[[ "$*" = *"https://github.com/matveydurden/ruwifi/releases/download/v1.0.7/ruwifi-macos-arm64.zip"* ]] || exit 43
 while [ "$#" -gt 0 ]; do
     if [ "$1" = --output ]; then printf 'corrupt' > "$2"; exit 0; fi
     shift

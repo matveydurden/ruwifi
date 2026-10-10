@@ -28,7 +28,7 @@ func vpnIsDetected(scutilList: String, publicRoute: String) -> Bool {
 
 enum RoutingConfiguration {
     // DNS uses the ASCII Punycode names for .рус and .рф.
-    static let directDomainSuffixes = ["ru", "1cfresh.com", "xn--p1acf", "xn--p1ai", "beget.com"]
+    static let directDomainSuffixes = ["ru", "1cfresh.com", "xn--p1acf", "xn--p1ai", "beget.com", "pachca.com"]
     static func isDirectDomain(_ name: String) -> Bool {
         var host = name.lowercased()
         if host.hasSuffix(".") { host.removeLast() }

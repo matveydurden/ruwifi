@@ -9,8 +9,8 @@ import Darwin
         let settings = DomainResolvers(directory: root, journals: root)
         let ru = root + "/ru", fresh = root + "/1cfresh.com"
         let ruJournal = root + "/resolver-journal.json", freshJournal = root + "/resolver-1cfresh.com-journal.json"
-        let additionalFiles = ["xn--p1acf", "xn--p1ai", "beget.com"].map { root + "/" + $0 }
-        let additionalJournals = ["xn--p1acf", "xn--p1ai", "beget.com"].map { root + "/resolver-" + $0 + "-journal.json" }
+        let additionalFiles = ["xn--p1acf", "xn--p1ai", "beget.com", "pachca.com"].map { root + "/" + $0 }
+        let additionalJournals = ["xn--p1acf", "xn--p1ai", "beget.com", "pachca.com"].map { root + "/resolver-" + $0 + "-journal.json" }
         let old = Data("nameserver 192.0.2.53\n".utf8)
         var failures: [String] = []
         func check(_ value: Bool, _ reason: String) { if !value { failures.append(reason) } }
@@ -64,6 +64,6 @@ import Darwin
         do { try settings.apply(); failures.append("FRESH-OWNERSHIP: symbolic-link resolver accepted") } catch {}
         check(try optionalFile(outside) == external, "FRESH-OWNERSHIP: symbolic link target changed")
         if !failures.isEmpty { failures.forEach { print("FAIL: " + $0) }; exit(1) }
-        print("PASS: all domain resolvers including .рус/.рф and beget.com, upgrade, repeated enable, Off, rollback and external ownership")
+        print("PASS: all domain resolvers including .рус/.рф, beget.com and pachca.com, upgrade, repeated enable, Off, rollback and external ownership")
     }
 }

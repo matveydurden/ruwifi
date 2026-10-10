@@ -26,6 +26,12 @@ import Foundation
         for name in ["notbeget.com", "beget.com.evil", "cp.beget.com.evil", "a..beget.com"] {
             check(!RoutingConfiguration.isDirectDomain(name), "BEGET-ROUTE: falsely classified \(name)")
         }
+        for name in ["pachca.com", "app.pachca.com", "a.b.pachca.com", "APP.PACHCA.COM.", "pachca.com.ru"] {
+            check(RoutingConfiguration.isDirectDomain(name), "PACHCA-ROUTE: did not classify \(name)")
+        }
+        for name in ["notpachca.com", "pachca.com.evil", "app.pachca.com.evil", "a..pachca.com"] {
+            check(!RoutingConfiguration.isDirectDomain(name), "PACHCA-ROUTE: falsely classified \(name)")
+        }
         // VPN-DETECTION: provider-independent service and route indicators.
         let hidemyName = "(Connected) VPN (hidemyname.vpn) \"hidemyname.vpn (OpenVPN)\" [VPN:hidemyname.vpn]"
         check(vpnIsDetected(scutilList: hidemyName, publicRoute: "interface: en0"), "VPN-DETECTION: OpenVPN service not recognized")
@@ -58,7 +64,7 @@ import Foundation
         check(!status.isFresh(for: pref), "RU-STATUS: stale heartbeat accepted")
         let config = try RoutingConfiguration.make(wifi: "en0", cache: "/tmp/ru-cache.db", secret: "test")
         let dnsRules = (config["dns"] as? [String: Any])?["rules"] as? [[String: Any]] ?? []
-        let expectedSuffixes = ["ru", "1cfresh.com", "xn--p1acf", "xn--p1ai", "beget.com"]
+        let expectedSuffixes = ["ru", "1cfresh.com", "xn--p1acf", "xn--p1ai", "beget.com", "pachca.com"]
         check(dnsRules.count == 2 && dnsRules.allSatisfy { $0["domain_suffix"] as? [String] == expectedSuffixes }, "DIRECT-DNS: A/AAAA and HTTPS/SVCB rules must include only approved suffixes")
         let routeRules = (config["route"] as? [String: Any])?["rules"] as? [[String: Any]] ?? []
         check(routeRules.contains { $0["outbound"] as? String == "RU" && $0["domain_suffix"] as? [String] == expectedSuffixes }, "DIRECT-ROUTE: every approved suffix must use the same on/off selector")
